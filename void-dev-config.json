@@ -1,0 +1,71 @@
+{
+  "enabled": true,
+  "globalSettings": {
+    "isOnboardingComplete": true,
+    "enableCopilot": false,
+    "enableTelemetry": false,
+    "useOllamaServer": false,
+    "customOllamaServerURL": "",
+    "aiInstructions": "",
+    "defaultToolApprovalType": "explicit",
+    "chatMode": "default"
+  },
+  "providers": {
+    "anthropic": {
+      "apiKey": "REMOVED_ANTHROPIC_API_KEY",
+      "enabled": true
+    },
+    "openAI": {
+      "apiKey": "",
+      "enabled": false
+    },
+    "gemini": {
+      "apiKey": "",
+      "enabled": false
+    },
+    "googleVertex": {
+      "apiKey": "",
+      "enabled": false
+    },
+    "microsoftAzure": {
+      "apiKey": "",
+      "endpoint": "",
+      "enabled": false
+    },
+    "openRouter": {
+      "apiKey": "",
+      "enabled": false
+    },
+    "liteLLM": {
+      "apiKey": "",
+      "endpoint": "",
+      "enabled": false
+    },
+    "ollama": {
+      "enabled": false
+    },
+    "openAICompatible": {
+      "apiKey": "",
+      "endpoint": "",
+      "enabled": false
+    }
+  },
+  "featureModelSelections": {
+    "Chat": {
+      "providerName": "anthropic",
+      "modelName": "claude-3-opus-20240229"
+    },
+    "Ctrl+K": {
+      "providerName": "anthropic",
+      "modelName": "claude-3-opus-20240229"
+    },
+    "Apply": {
+      "providerName": "anthropic",
+      "modelName": "claude-3-opus-20240229"
+    },
+    "Autocomplete": {
+      "providerName": "anthropic",
+      "modelName": "claude-3-opus-20240229"
+    }
+  }
+}

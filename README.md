@@ -1,5 +1,12 @@
 # Welcome to Void.
 
+
+
+On Windows:
+Run `npm run compile`
+Run `npm run buildreact`
+Start the application with `.\scripts\code.bat --dev --verbose`
+
 <div align="center">
 	<img
 		src="./src/vs/workbench/browser/parts/editor/media/slice_of_void.png"
