@@ -12,17 +12,23 @@ import { GlobalSettings, ProviderName, ModelSelectionOfFeature } from './voidSet
 import { join } from '../../../../base/common/path.js';
 
 /**
+ * Provider configuration in the development config file
+ * Note: API keys should be stored in .env file, not here
+ */
+export interface IProviderDevConfig {
+	// API key field is intentionally omitted - should come from .env
+	endpoint?: string;
+	enabled?: boolean;
+}
+
+/**
  * Interface for the development configuration file
  */
 export interface IVoidDevConfig {
 	enabled: boolean;
 	globalSettings: Partial<GlobalSettings>;
 	providers: {
-		[key in ProviderName]?: {
-			apiKey?: string;
-			endpoint?: string;
-			enabled?: boolean;
-		}
+		[key in ProviderName]?: IProviderDevConfig;
 	};
 	featureModelSelections: Partial<ModelSelectionOfFeature>;
 }
@@ -32,6 +38,64 @@ export interface IVoidDevConfig {
  */
 export function isDevMode(): boolean {
 	return process.env['VSCODE_DEV'] === '1';
+}
+
+/**
+ * Loads environment variables from .env file
+ * @param fileService File service to read the .env file
+ * @param environmentService Environment service to get the root path
+ * @param logService Log service for logging errors
+ */
+async function loadEnvironmentVariables(
+	fileService: IFileService,
+	environmentService: INativeEnvironmentService,
+	logService: ILogService
+): Promise<void> {
+	try {
+		const appRoot = URI.file(
+			typeof environmentService.appRoot === 'string'
+				? environmentService.appRoot
+				: join(environmentService.userDataPath, '../..')
+		);
+		const envPath = URI.joinPath(appRoot, '.env').fsPath;
+		
+		// Check if .env file exists
+		const exists = await fileService.exists(URI.file(envPath));
+		if (exists) {
+			// Read and parse .env file
+			const envContent = await fileService.readFile(URI.file(envPath));
+			const loaded: Record<string, string> = {};
+			
+			envContent.value.toString().split('\n').forEach(line => {
+				// Skip comments and empty lines
+				if (!line || line.startsWith('#')) return;
+				
+				const [key, ...valueParts] = line.split('=');
+				if (key && valueParts.length) {
+					const value = valueParts.join('=').trim();
+					const trimmedKey = key.trim();
+					loaded[trimmedKey] = value;
+					
+					// Only set the environment variable if it's not already set
+					if (!process.env[trimmedKey]) {
+						process.env[trimmedKey] = value;
+					}
+				}
+			});
+			
+			logService.info('Loaded environment variables from .env file');
+			
+			// Log loaded API keys (not their values, just which ones were loaded)
+			const apiKeys = Object.keys(loaded).filter(key => key.includes('API_KEY'));
+			if (apiKeys.length > 0) {
+				logService.info(`Loaded API keys from .env file: ${apiKeys.join(', ')}`);
+			}
+		} else {
+			logService.debug('.env file not found at', envPath);
+		}
+	} catch (error) {
+		logService.error('Failed to load environment variables from .env file:', error);
+	}
 }
 
 /**
@@ -46,6 +110,9 @@ export async function loadDevConfig(
 	environmentService: INativeEnvironmentService,
 	logService: ILogService
 ): Promise<IVoidDevConfig | undefined> {
+	// First load environment variables from .env file
+	await loadEnvironmentVariables(fileService, environmentService, logService);
+	
 	try {
 		// Get the application root directory
 		const appRoot = URI.file(
@@ -73,11 +140,71 @@ export async function loadDevConfig(
 			return undefined;
 		}
 
+		// Apply API keys from environment variables to the config
+		applyEnvironmentVariablesToConfig(config, logService);
+
 		logService.info('Loaded development configuration from', devConfigPath.fsPath);
 		return config;
 	} catch (error) {
 		logService.error('Failed to load development configuration:', error);
 		return undefined;
+	}
+}
+
+/**
+ * Applies environment variables to the configuration
+ * @param config The configuration to update with environment variables
+ * @param logService Log service for logging
+ */
+function applyEnvironmentVariablesToConfig(config: IVoidDevConfig, logService: ILogService): void {
+	// Define mappings for provider-specific environment variables
+	const providerEnvVarMap: Record<string, Record<string, string>> = {
+		anthropic: {
+			apiKey: 'ANTHROPIC_API_KEY'
+		},
+		openAI: {
+			apiKey: 'OPENAI_API_KEY'
+		},
+		gemini: {
+			apiKey: 'GEMINI_API_KEY'
+		},
+		googleVertex: {
+			apiKey: 'GOOGLE_VERTEX_API_KEY'
+		},
+		microsoftAzure: {
+			apiKey: 'AZURE_API_KEY',
+			endpoint: 'AZURE_ENDPOINT'
+		},
+		openRouter: {
+			apiKey: 'OPENROUTER_API_KEY'
+		},
+		liteLLM: {
+			apiKey: 'LITELLM_API_KEY',
+			endpoint: 'LITELLM_ENDPOINT'
+		},
+		openAICompatible: {
+			apiKey: 'OPENAI_COMPATIBLE_API_KEY',
+			endpoint: 'OPENAI_COMPATIBLE_ENDPOINT'
+		}
+	};
+
+	// Apply environment variables to each provider's settings
+	for (const [providerName, envVarMap] of Object.entries(providerEnvVarMap)) {
+		// If provider doesn't exist in config, create it
+		if (!config.providers[providerName as ProviderName]) {
+			config.providers[providerName as ProviderName] = {};
+		}
+		
+		const provider = config.providers[providerName as ProviderName];
+
+		for (const [configKey, envVarName] of Object.entries(envVarMap)) {
+			// For API keys, we always set them from env vars if available
+			if (process.env[envVarName]) {
+				// Add the property if it doesn't exist
+				(provider as any)[configKey] = process.env[envVarName];
+				logService.info(`Using ${providerName} ${configKey} from environment variable ${envVarName}`);
+			}
+		}
 	}
 }
 
@@ -121,12 +248,8 @@ export function applyDevConfig(state: VoidSettingsState, devConfig: IVoidDevConf
 			// Get the provider settings from the *newState* object
 			const currentProviderSettings = newState.settingsOfProvider[typedProviderName];
 
-			// Apply API key if provided
-			if (providerConfig.apiKey !== undefined) {
-				if ('apiKey' in currentProviderSettings) {
-					(currentProviderSettings as any).apiKey = providerConfig.apiKey;
-				}
-			}
+			// Note: API keys are now handled via environment variables in .env
+			// We no longer handle API keys in the dev config file
 
 			// Apply endpoint if provided
 			if (providerConfig.endpoint !== undefined) {

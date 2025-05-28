@@ -12,32 +12,25 @@
   },
   "providers": {
     "anthropic": {
-      "apiKey": "REMOVED_ANTHROPIC_API_KEY",
       "enabled": true
     },
     "openAI": {
-      "apiKey": "",
       "enabled": false
     },
     "gemini": {
-      "apiKey": "",
       "enabled": false
     },
     "googleVertex": {
-      "apiKey": "",
       "enabled": false
     },
     "microsoftAzure": {
-      "apiKey": "",
       "endpoint": "",
       "enabled": false
     },
     "openRouter": {
-      "apiKey": "",
       "enabled": false
     },
     "liteLLM": {
-      "apiKey": "",
       "endpoint": "",
       "enabled": false
     },
@@ -45,7 +38,6 @@
       "enabled": false
     },
     "openAICompatible": {
-      "apiKey": "",
       "endpoint": "",
       "enabled": false
     }
