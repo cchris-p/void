@@ -55,6 +55,9 @@ import './tooltipService.js'
 // register onboarding service
 import './voidOnboardingService.js'
 
+// register dev bypass service
+import '../common/voidDevBypass.js'
+
 // register misc service
 import './miscWokrbenchContrib.js'
 
