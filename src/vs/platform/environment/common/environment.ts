@@ -146,6 +146,8 @@ export interface INativeEnvironmentService extends IEnvironmentService {
 
 	crossOriginIsolated?: boolean;
 
+	getAnthropicApiKey(): string | undefined;
+
 	// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 	//
 	// NOTE: KEEP THIS INTERFACE AS SMALL AS POSSIBLE.

@@ -4,7 +4,8 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'; // Added useRef import just in case it was missed, though likely already present
-import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, VoidStatefulModelInfo, customSettingNamesOfProvider, RefreshableProviderName, refreshableProviderNames, displayInfoOfProviderName, nonlocalProviderNames, localProviderNames, GlobalSettingName, featureNames, displayInfoOfFeatureName, isProviderNameDisabled, FeatureName, hasDownloadButtonsOnModelsProviderNames, subTextMdOfProviderName } from '../../../../common/voidSettingsTypes.js'
+import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, VoidStatefulModelInfo, customSettingNamesOfProvider, RefreshableProviderName, refreshableProviderNames, displayInfoOfProviderName, nonlocalProviderNames, localProviderNames, GlobalSettingName, featureNames, displayInfoOfFeatureName, isProviderNameDisabled, FeatureName, hasDownloadButtonsOnModelsProviderNames, subTextMdOfProviderName } from '../../../../common/voidSettingsTypes.js';
+import { IVoidSettingsService } from '../../../../common/voidSettingsService.js';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { VoidButtonBgDarken, VoidCustomDropdownBox, VoidInputBox2, VoidSimpleInputBox, VoidSwitch } from '../util/inputs.js'
 import { useAccessor, useIsDark, useRefreshModelListener, useRefreshModelState, useSettingsState } from '../util/services.js'
@@ -206,7 +207,7 @@ const SimpleModelSettingsDialog = ({
 	const accessor = useAccessor();
 	const settingsState = useSettingsState();
 	const mouseDownInsideModal = useRef(false); // Ref to track mousedown origin
-	const settingsStateService = accessor.get('IVoidSettingsService');
+	const settingsStateService: IVoidSettingsService = accessor.get('IVoidSettingsService');
 
 	// current overrides and defaults
 	const defaultModelCapabilities = getModelCapabilities(providerName, modelName, undefined);
@@ -588,7 +589,14 @@ export const ModelDump = ({ filteredProviders }: { filteredProviders?: ProviderN
 
 // providers
 
-const ProviderSetting = ({ providerName, settingName, subTextMd }: { providerName: ProviderName, settingName: SettingName, subTextMd: React.ReactNode }) => {
+const ProviderSetting = ({ providerName, settingName, subTextMd }: { providerName: ProviderName, settingName: SettingName, subTextMd?: React.ReactNode }) => {
+	// Log each provider setting being rendered
+	console.log(`[ProviderSetting] Rendering for provider: ${providerName}, setting: ${settingName}`);
+
+	// Special log for Anthropic API Key
+	if (providerName === 'anthropic' && settingName === 'apiKey') {
+		console.log('[ProviderSetting] *** ANTHROPIC API KEY FIELD RENDERING ***');
+	}
 
 	const { title: settingTitle, placeholder, isPasswordField } = displayInfoOfSettingName(providerName, settingName)
 
@@ -597,6 +605,9 @@ const ProviderSetting = ({ providerName, settingName, subTextMd }: { providerNam
 	const settingsState = useSettingsState()
 
 	const settingValue = settingsState.settingsOfProvider[providerName][settingName] as string // this should always be a string in this component
+	if (providerName === 'anthropic' && settingName === 'apiKey') {
+		console.log('[Settings.tsx] ProviderSetting - Anthropic API Key Value:', settingValue);
+	}
 	if (typeof settingValue !== 'string') {
 		console.log('Error: Provider setting had a non-string value.')
 		return
@@ -669,6 +680,7 @@ const ProviderSetting = ({ providerName, settingName, subTextMd }: { providerNam
 // }
 
 export const SettingsForProvider = ({ providerName, showProviderTitle, showProviderSuggestions }: { providerName: ProviderName, showProviderTitle: boolean, showProviderSuggestions: boolean }) => {
+	console.log('[Settings.tsx] SettingsForProvider - Rendering for providerName:', providerName); // Log for every provider
 	const voidSettingsState = useSettingsState()
 
 	const needsModel = isProviderNameDisabled(providerName, voidSettingsState) === 'addModel'
@@ -680,6 +692,13 @@ export const SettingsForProvider = ({ providerName, showProviderTitle, showProvi
 	const settingNames = customSettingNamesOfProvider(providerName)
 
 	const { title: providerTitle } = displayInfoOfProviderName(providerName)
+	if (providerName === 'anthropic') {
+		console.log('[Settings.tsx] SettingsForProvider - Anthropic settingsState:', JSON.stringify(voidSettingsState.settingsOfProvider.anthropic, null, 2));
+	}
+
+	const providerSettings = voidSettingsState.settingsOfProvider[providerName]
+	const providerDisplayInfo = displayInfoOfProviderName(providerName)
+	console.log({providerSettings, providerDisplayInfo})
 
 	return <div>
 
@@ -754,8 +773,6 @@ export const AutoDetectLocalModelsToggle = () => {
 		/>}
 		text={`Automatically detect local providers and models (${refreshableProviderNames.map(providerName => displayInfoOfProviderName(providerName).title).join(', ')}).`}
 	/>
-
-
 }
 
 export const AIInstructionsBox = () => {
@@ -792,10 +809,8 @@ const FastApplyMethodDropdown = () => {
 		getOptionDropdownName={(val) => val ? 'Fast Apply' : 'Slow Apply'}
 		getOptionDropdownDetail={(val) => val ? 'Output Search/Replace blocks' : 'Rewrite whole files'}
 		getOptionsEqual={(a, b) => a === b}
-	/>
-
+	/>;
 }
-
 
 export const OllamaSetupInstructions = ({ sayWeAutoDetect }: { sayWeAutoDetect?: boolean }) => {
 	return <div className='prose-p:my-0 prose-ol:list-decimal prose-p:py-0 prose-ol:my-0 prose-ol:py-0 prose-span:my-0 prose-span:py-0 text-void-fg-3 text-sm list-decimal select-text'>
@@ -899,6 +914,7 @@ export const OneClickSwitchButton = ({ fromEditor = 'VS Code', className = '' }:
 // full settings
 
 export const Settings = () => {
+	console.log('<<<< SETTINGS COMPONENT FUNCTION EXECUTED >>>>');
 	const isDark = useIsDark()
 	const accessor = useAccessor()
 	const commandService = accessor.get('ICommandService')
@@ -1247,4 +1263,3 @@ Alternatively, place a \`.voidrules\` file in the root of your workspace.
 		</div>
 	</div>
 }
-

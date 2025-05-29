@@ -142,7 +142,9 @@ class CodeMain {
 					evt.join('instanceLockfile', promises.unlink(environmentMainService.mainLockfile).catch(() => { /* ignored */ }));
 				});
 
-				return instantiationService.createInstance(CodeApplication, mainProcessNodeIpcServer, instanceEnvironment).startup();
+				const anthropicApiKey = process.env['ANTHROPIC_API_KEY'];
+				logService.info(`[CodeMain] Read ANTHROPIC_API_KEY: ${anthropicApiKey ? 'found' : 'not found'}`);
+				return instantiationService.createInstance(CodeApplication, mainProcessNodeIpcServer, instanceEnvironment, anthropicApiKey).startup();
 			});
 		} catch (error) {
 			instantiationService.invokeFunction(this.quit, error);

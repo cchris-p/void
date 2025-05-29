@@ -362,6 +362,7 @@ export interface IColorScheme {
 
 export interface IWindowConfiguration {
 	remoteAuthority?: string;
+	anthropicApiKey?: string; // Added for Void extension
 
 	filesToOpenOrCreate?: IPath[];
 	filesToDiff?: IPath[];
@@ -417,6 +418,7 @@ export interface INativeWindowConfiguration extends IWindowConfiguration, Native
 
 	os: IOSConfiguration;
 	policiesData?: IStringDictionary<{ definition: PolicyDefinition; value: PolicyValue }>;
+	anthropicApiKey?: string; // Added for API key propagation
 }
 
 /**

@@ -10,16 +10,18 @@ import { IEncryptionService } from '../../../../platform/encryption/common/encry
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
+import { INativeEnvironmentService } from '../../../../platform/environment/common/environment.js';
+import { ILogService } from '../../../../platform/log/common/log.js';
 import { IMetricsService } from './metricsService.js';
 import { defaultProviderSettings, getModelCapabilities, ModelOverrides } from './modelCapabilities.js';
 import { VOID_SETTINGS_STORAGE_KEY } from './storageKeys.js';
 import { defaultSettingsOfProvider, FeatureName, ProviderName, ModelSelectionOfFeature, SettingsOfProvider, SettingName, providerNames, ModelSelection, modelSelectionsEqual, featureNames, VoidStatefulModelInfo, GlobalSettings, GlobalSettingName, defaultGlobalSettings, ModelSelectionOptions, OptionsOfModelSelection, ChatMode, OverridesOfModel, defaultOverridesOfModel } from './voidSettingsTypes.js';
 
-
 // name is the name in the dropdown
 export type ModelOption = { name: string, selection: ModelSelection }
 
-
+// type RealVoidSettings = Exclude<keyof VoidSettingsState, '_modelOptions'>
+// type EventProp<T extends RealVoidSettings = RealVoidSettings> = T extends 'globalSettings' ? [T, keyof VoidSettingsState[T]] : T | 'all'
 
 type SetSettingOfProviderFn = <S extends SettingName>(
 	providerName: ProviderName,
@@ -36,7 +38,6 @@ type SetGlobalSettingFn = <T extends GlobalSettingName>(settingName: T, newVal: 
 
 type SetOptionsOfModelSelection = (featureName: FeatureName, providerName: ProviderName, modelName: string, newVal: Partial<ModelSelectionOptions>) => void
 
-
 export type VoidSettingsState = {
 	readonly settingsOfProvider: SettingsOfProvider; // optionsOfProvider
 	readonly modelSelectionOfFeature: ModelSelectionOfFeature; // stateOfFeature
@@ -47,11 +48,8 @@ export type VoidSettingsState = {
 	readonly _modelOptions: ModelOption[] // computed based on the two above items
 }
 
-// type RealVoidSettings = Exclude<keyof VoidSettingsState, '_modelOptions'>
-// type EventProp<T extends RealVoidSettings = RealVoidSettings> = T extends 'globalSettings' ? [T, keyof VoidSettingsState[T]] : T | 'all'
-
-
 export interface IVoidSettingsService {
+	getAnthropicApiKey(): string | undefined;
 	readonly _serviceBrand: undefined;
 	readonly state: VoidSettingsState; // in order to play nicely with react, you should immutably change state
 	readonly waitForInitState: Promise<void>;
@@ -75,9 +73,6 @@ export interface IVoidSettingsService {
 	deleteModel(providerName: ProviderName, modelName: string): boolean;
 }
 
-
-
-
 const _modelsWithSwappedInNewModels = (options: { existingModels: VoidStatefulModelInfo[], models: string[], type: 'autodetected' | 'default' }) => {
 	const { existingModels, models, type } = options
 
@@ -97,7 +92,6 @@ const _modelsWithSwappedInNewModels = (options: { existingModels: VoidStatefulMo
 	]
 }
 
-
 export const modelFilterOfFeatureName: {
 	[featureName in FeatureName]: {
 		filter: (
@@ -105,13 +99,13 @@ export const modelFilterOfFeatureName: {
 			opts: { chatMode: ChatMode, overridesOfModel: OverridesOfModel }
 		) => boolean;
 		emptyMessage: null | { message: string, priority: 'always' | 'fallback' }
-	} } = {
+	}
+} = {
 	'Autocomplete': { filter: (o, opts) => getModelCapabilities(o.providerName, o.modelName, opts.overridesOfModel).supportsFIM, emptyMessage: { message: 'No models support FIM', priority: 'always' } },
 	'Chat': { filter: o => true, emptyMessage: null, },
 	'Ctrl+K': { filter: o => true, emptyMessage: null, },
 	'Apply': { filter: o => true, emptyMessage: null, },
 }
-
 
 const _stateWithMergedDefaultModels = (state: VoidSettingsState): VoidSettingsState => {
 	let newSettingsOfProvider = state.settingsOfProvider
@@ -188,7 +182,6 @@ const _validatedModelState = (state: Omit<VoidSettingsState, '_modelOptions'>): 
 		}
 	}
 
-
 	const newState = {
 		...state,
 		settingsOfProvider: newSettingsOfProvider,
@@ -199,10 +192,6 @@ const _validatedModelState = (state: Omit<VoidSettingsState, '_modelOptions'>): 
 
 	return newState
 }
-
-
-
-
 
 const defaultState = () => {
 	const d: VoidSettingsState = {
@@ -216,7 +205,6 @@ const defaultState = () => {
 	return d
 }
 
-
 export const IVoidSettingsService = createDecorator<IVoidSettingsService>('VoidSettingsService');
 class VoidSettingsService extends Disposable implements IVoidSettingsService {
 	_serviceBrand: undefined;
@@ -225,6 +213,7 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 	readonly onDidChangeState: Event<void> = this._onDidChangeState.event; // this is primarily for use in react, so react can listen + update on state changes
 
 	state: VoidSettingsState;
+	private anthropicApiKey?: string;
 
 	private readonly _resolver: () => void
 	waitForInitState: Promise<void> // await this if you need a valid state initially
@@ -233,6 +222,8 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 		@IStorageService private readonly _storageService: IStorageService,
 		@IEncryptionService private readonly _encryptionService: IEncryptionService,
 		@IMetricsService private readonly _metricsService: IMetricsService,
+		@ILogService private readonly logService: ILogService,
+		@INativeEnvironmentService private readonly environmentService: INativeEnvironmentService,
 		// could have used this, but it's clearer the way it is (+ slightly different eg StorageTarget.USER)
 		// @ISecretStorageService private readonly _secretStorageService: ISecretStorageService,
 	) {
@@ -244,11 +235,17 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 		this.waitForInitState = new Promise((res, rej) => resolver = res)
 		this._resolver = resolver
 
-		this.readAndInitializeState()
+		this.readAndInitializeState();
+
+		this.logService.info(`[VoidSettingsService] Attempting to read ANTHROPIC_API_KEY from INativeEnvironmentService.`);
+		if (this.environmentService && typeof this.environmentService.getAnthropicApiKey === 'function') {
+			this.anthropicApiKey = this.environmentService.getAnthropicApiKey();
+			this.logService.info(`[VoidSettingsService] ANTHROPIC_API_KEY from INativeEnvironmentService: ${this.anthropicApiKey ? 'found' : 'not found'}`);
+		} else {
+			this.logService.warn(`[VoidSettingsService] INativeEnvironmentService or getAnthropicApiKey method is not available at the time of API key retrieval.`);
+			this.anthropicApiKey = undefined;
+		}
 	}
-
-
-
 
 	dangerousSetState = async (newState: VoidSettingsState) => {
 		this.state = _validatedModelState(newState)
@@ -260,10 +257,13 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 		await this.dangerousSetState(defaultState())
 	}
 
-
-
-
 	async readAndInitializeState() {
+		// Safe access to process.env with defensive checks
+		if (typeof process !== 'undefined' && process.env) {
+			console.log('[VoidSettingsService] process.env is available');
+		} else {
+			console.log('[VoidSettingsService] process.env is not available in this context');
+		}
 		let readS: VoidSettingsState
 		try {
 			readS = await this._readState();
@@ -287,6 +287,7 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 				// ...readS.settingsOfProvider,
 			}
 
+			// This loop merges defaults for each provider
 			for (const providerName of providerNames) {
 				readS.settingsOfProvider[providerName] = {
 					...defaultSettingsOfProvider[providerName],
@@ -320,13 +321,63 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 		this.state = _stateWithMergedDefaultModels(this.state)
 		this.state = _validatedModelState(this.state);
 
+		// === BEGIN ENVIRONMENT VARIABLE OVERRIDE ===
+		let anthropicApiKeyFromEnv: string | undefined = undefined;
+
+		this.logService.info(`[VoidSettingsService] Attempting to read ANTHROPIC_API_KEY using environmentService.getAnthropicApiKey().`);
+
+		if (!this.environmentService) {
+			this.logService.warn(`[VoidSettingsService] this.environmentService is NOT available at the time of API key check.`);
+		} else if (typeof this.environmentService.getAnthropicApiKey !== 'function') {
+			this.logService.warn(`[VoidSettingsService] this.environmentService IS available, but getAnthropicApiKey method is NOT available. This might be an older version or a different implementation of INativeEnvironmentService.`);
+			try {
+				this.logService.info(`[VoidSettingsService] Current value of this.environmentService (when getAnthropicApiKey is missing): ${JSON.stringify(this.environmentService)}`);
+			} catch (e) {
+				this.logService.error(`[VoidSettingsService] Could not stringify this.environmentService: ${e}`);
+			}
+		} else {
+			// This means environmentService and environmentService.getAnthropicApiKey are available
+			anthropicApiKeyFromEnv = this.environmentService.getAnthropicApiKey();
+			if (anthropicApiKeyFromEnv && typeof anthropicApiKeyFromEnv === 'string' && anthropicApiKeyFromEnv.length > 0) {
+				this.logService.info(`[VoidSettingsService] Successfully retrieved ANTHROPIC_API_KEY via getAnthropicApiKey().`);
+			} else {
+				this.logService.warn(`[VoidSettingsService] ANTHROPIC_API_KEY was NOT found or was invalid when calling getAnthropicApiKey(). Value: '${anthropicApiKeyFromEnv}'. Skipping environment override.`);
+				anthropicApiKeyFromEnv = undefined; // Ensure it's undefined if not valid
+			}
+		}
+
+		// Now, if anthropicApiKeyFromEnv has a value, apply it to the state.
+		if (anthropicApiKeyFromEnv) {
+			const currentSettings = this.state.settingsOfProvider['anthropic'];
+			// Ensure currentSettings and defaultSettingsOfProvider.anthropic are defined before spreading
+			const defaultAnthropicSettings = defaultSettingsOfProvider.anthropic || {};
+			const currentAnthropicSettings = currentSettings || defaultAnthropicSettings;
+
+			if (currentAnthropicSettings.apiKey !== anthropicApiKeyFromEnv) {
+				this.state = {
+					...this.state,
+					settingsOfProvider: {
+						...this.state.settingsOfProvider,
+						'anthropic': {
+							...currentAnthropicSettings,
+							apiKey: anthropicApiKeyFromEnv,
+						},
+					},
+				};
+				this.state = _validatedModelState(this.state); // Re-validate state after modification
+				this.logService.info(`[VoidSettingsService] ANTHROPIC_API_KEY has been set from environmentService.args and state re-validated.`);
+			} else {
+				this.logService.info(`[VoidSettingsService] ANTHROPIC_API_KEY from environmentService.args is the same as current. No change needed.`);
+			}
+		} else {
+			this.logService.info(`[VoidSettingsService] Proceeding without ANTHROPIC_API_KEY from environment override as it was not found or was invalid.`);
+		}
+		// === END ENVIRONMENT VARIABLE OVERRIDE ===
 
 		this._resolver();
 		this._onDidChangeState.fire();
 
 	}
-
-
 	private async _readState(): Promise<VoidSettingsState> {
 		const encryptedState = this._storageService.get(VOID_SETTINGS_STORAGE_KEY, StorageScope.APPLICATION)
 
@@ -337,7 +388,6 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 		const state = JSON.parse(stateStr)
 		return state
 	}
-
 
 	private async _storeState() {
 		const state = this.state
@@ -377,7 +427,6 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 
 	}
 
-
 	private _onUpdate_syncApplyToChat() {
 		// if sync is turned on, sync (call this whenever Chat model or !!sync changes)
 		this.setModelSelectionOfFeature('Apply', deepClone(this.state.modelSelectionOfFeature['Chat']))
@@ -400,7 +449,6 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 		if (this.state.globalSettings.syncApplyToChat) this._onUpdate_syncApplyToChat()
 	}
 
-
 	setModelSelectionOfFeature: SetModelSelectionOfFeatureFn = async (featureName, newVal) => {
 		const newState: VoidSettingsState = {
 			...this.state,
@@ -420,7 +468,6 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 			if (this.state.globalSettings.syncApplyToChat) this._onUpdate_syncApplyToChat()
 		}
 	}
-
 
 	setOptionsOfModelSelection = async (featureName: FeatureName, providerName: ProviderName, modelName: string, newVal: Partial<ModelSelectionOptions>) => {
 		const newState: VoidSettingsState = {
@@ -467,9 +514,6 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 		this._metricsService.capture('Update Model Overrides', { providerName, modelName, overrides });
 	}
 
-
-
-
 	setAutodetectedModels(providerName: ProviderName, autodetectedModelNames: string[], logging: object) {
 
 		const { models } = this.state.settingsOfProvider[providerName]
@@ -488,7 +532,6 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 	}
 	toggleModelHidden(providerName: ProviderName, modelName: string) {
 
-
 		const { models } = this.state.settingsOfProvider[providerName]
 		const modelIdx = models.findIndex(m => m.modelName === modelName)
 		if (modelIdx === -1) return
@@ -503,35 +546,38 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 		this._metricsService.capture('Toggle Model Hidden', { providerName, modelName, newIsHidden })
 
 	}
+
+	public getAnthropicApiKey(): string | undefined {
+		return this.anthropicApiKey;
+	}
+
 	addModel(providerName: ProviderName, modelName: string) {
-		const { models } = this.state.settingsOfProvider[providerName]
-		const existingIdx = models.findIndex(m => m.modelName === modelName)
-		if (existingIdx !== -1) return // if exists, do nothing
+		const { models } = this.state.settingsOfProvider[providerName];
+		const existingIdx = models.findIndex(m => m.modelName === modelName);
+		if (existingIdx !== -1) return; // if exists, do nothing
 		const newModels = [
 			...models,
 			{ modelName, type: 'custom', isHidden: false } as const
-		]
-		this.setSettingOfProvider(providerName, 'models', newModels)
+		];
+		this.setSettingOfProvider(providerName, 'models', newModels);
 
-		this._metricsService.capture('Add Model', { providerName, modelName })
-
+		this._metricsService.capture('Add Model', { providerName, modelName });
 	}
+
 	deleteModel(providerName: ProviderName, modelName: string): boolean {
-		const { models } = this.state.settingsOfProvider[providerName]
-		const delIdx = models.findIndex(m => m.modelName === modelName)
-		if (delIdx === -1) return false
+		const { models } = this.state.settingsOfProvider[providerName];
+		const delIdx = models.findIndex(m => m.modelName === modelName);
+		if (delIdx === -1) return false;
 		const newModels = [
-			...models.slice(0, delIdx), // delete the idx
-			...models.slice(delIdx + 1, Infinity)
-		]
-		this.setSettingOfProvider(providerName, 'models', newModels)
+			...models.slice(0, delIdx),
+			...models.slice(delIdx + 1)
+		];
+		this.setSettingOfProvider(providerName, 'models', newModels);
 
-		this._metricsService.capture('Delete Model', { providerName, modelName })
+		this._metricsService.capture('Delete Model', { providerName, modelName });
 
-		return true
+		return true;
 	}
-
 }
-
 
 registerSingleton(IVoidSettingsService, VoidSettingsService, InstantiationType.Eager);

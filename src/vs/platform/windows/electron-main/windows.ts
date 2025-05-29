@@ -91,6 +91,7 @@ export interface IBaseOpenConfiguration {
 }
 
 export interface IOpenConfiguration extends IBaseOpenConfiguration {
+	anthropicApiKey?: string; // Added for Void extension
 	readonly cli: NativeParsedArgs;
 	readonly userEnv?: IProcessEnvironment;
 	readonly urisToOpen?: IWindowOpenable[];

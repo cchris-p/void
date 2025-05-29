@@ -17,6 +17,7 @@ import { join } from '../../../../base/common/path.js';
  */
 export interface IProviderDevConfig {
 	// API key field is intentionally omitted - should come from .env
+	apiKey?: string;
 	endpoint?: string;
 	enabled?: boolean;
 }
@@ -58,33 +59,33 @@ async function loadEnvironmentVariables(
 				: join(environmentService.userDataPath, '../..')
 		);
 		const envPath = URI.joinPath(appRoot, '.env').fsPath;
-		
+
 		// Check if .env file exists
 		const exists = await fileService.exists(URI.file(envPath));
 		if (exists) {
 			// Read and parse .env file
 			const envContent = await fileService.readFile(URI.file(envPath));
 			const loaded: Record<string, string> = {};
-			
+
 			envContent.value.toString().split('\n').forEach(line => {
 				// Skip comments and empty lines
 				if (!line || line.startsWith('#')) return;
-				
+
 				const [key, ...valueParts] = line.split('=');
 				if (key && valueParts.length) {
 					const value = valueParts.join('=').trim();
 					const trimmedKey = key.trim();
 					loaded[trimmedKey] = value;
-					
+
 					// Only set the environment variable if it's not already set
 					if (!process.env[trimmedKey]) {
 						process.env[trimmedKey] = value;
 					}
 				}
 			});
-			
+
 			logService.info('Loaded environment variables from .env file');
-			
+
 			// Log loaded API keys (not their values, just which ones were loaded)
 			const apiKeys = Object.keys(loaded).filter(key => key.includes('API_KEY'));
 			if (apiKeys.length > 0) {
@@ -112,7 +113,7 @@ export async function loadDevConfig(
 ): Promise<IVoidDevConfig | undefined> {
 	// First load environment variables from .env file
 	await loadEnvironmentVariables(fileService, environmentService, logService);
-	
+
 	try {
 		// Get the application root directory
 		const appRoot = URI.file(
@@ -194,7 +195,7 @@ function applyEnvironmentVariablesToConfig(config: IVoidDevConfig, logService: I
 		if (!config.providers[providerName as ProviderName]) {
 			config.providers[providerName as ProviderName] = {};
 		}
-		
+
 		const provider = config.providers[providerName as ProviderName];
 
 		for (const [configKey, envVarName] of Object.entries(envVarMap)) {
@@ -248,22 +249,27 @@ export function applyDevConfig(state: VoidSettingsState, devConfig: IVoidDevConf
 			// Get the provider settings from the *newState* object
 			const currentProviderSettings = newState.settingsOfProvider[typedProviderName];
 
-			// Note: API keys are now handled via environment variables in .env
-			// We no longer handle API keys in the dev config file
-
-			// Apply endpoint if provided
-			if (providerConfig.endpoint !== undefined) {
-				if ('endpoint' in currentProviderSettings) {
-					(currentProviderSettings as any).endpoint = providerConfig.endpoint;
+			// API Key from devConfig (which should have been populated from .env by applyEnvironmentVariablesToConfig)
+			if (providerConfig.apiKey !== undefined) {
+				// Runtime check to ensure the property exists on the specific provider type we're dealing with.
+				// defaultProviderSettings defines which providers have apiKey.
+				if ('apiKey' in currentProviderSettings) {
+					currentProviderSettings.apiKey = providerConfig.apiKey;
 				}
 			}
 
-			// Apply enabled status if provided
-			if (providerConfig.enabled !== undefined) {
-				// Assuming isEnabled is not readonly within the ProviderSetting object itself
-				if ('isEnabled' in currentProviderSettings) {
-					(currentProviderSettings as { isEnabled?: boolean }).isEnabled = providerConfig.enabled;
+			// Endpoint from devConfig
+			if (providerConfig.endpoint !== undefined) {
+				// Runtime check, similar to apiKey.
+				if ('endpoint' in currentProviderSettings) {
+					currentProviderSettings.endpoint = providerConfig.endpoint;
 				}
+			}
+
+			// Enabled status from devConfig, map to _didFillInProviderSettings
+			// This property exists on CommonProviderSettings, so it's on all SettingsAtProvider types.
+			if (providerConfig.enabled !== undefined) {
+				currentProviderSettings._didFillInProviderSettings = providerConfig.enabled;
 			}
 		}
 	}

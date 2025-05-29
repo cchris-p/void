@@ -19,6 +19,7 @@ import { IProcessEnvironment, isLinux, isLinuxSnap, isMacintosh, isWindows, OS }
 import { assertType } from '../../base/common/types.js';
 import { URI } from '../../base/common/uri.js';
 import { generateUuid } from '../../base/common/uuid.js';
+import { CancellationToken } from '../../base/common/cancellation.js';
 import { registerContextMenuListener } from '../../base/parts/contextmenu/electron-main/contextmenu.js';
 import { getDelayedChannel, ProxyChannel, StaticRouter } from '../../base/parts/ipc/common/ipc.js';
 import { Server as ElectronIPCServer } from '../../base/parts/ipc/electron-main/ipc.electron.js';
@@ -149,6 +150,7 @@ export class CodeApplication extends Disposable {
 	constructor(
 		private readonly mainProcessNodeIpcServer: NodeIPCServer,
 		private readonly userEnv: IProcessEnvironment,
+		private readonly anthropicApiKey: string | undefined,
 		@IInstantiationService private readonly mainInstantiationService: IInstantiationService,
 		@ILogService private readonly logService: ILogService,
 		@ILoggerService private readonly loggerService: ILoggerService,
@@ -161,6 +163,7 @@ export class CodeApplication extends Disposable {
 		@IUserDataProfilesMainService private readonly userDataProfilesMainService: IUserDataProfilesMainService
 	) {
 		super();
+		this.logService.info(`[CodeApplication] Received ANTHROPIC_API_KEY: ${this.anthropicApiKey ? 'yes' : 'no'}`);
 
 		this.configureSession();
 		this.registerListeners();
@@ -388,6 +391,16 @@ export class CodeApplication extends Disposable {
 		registerContextMenuListener();
 
 		// Accessibility change event
+		// Send ANTHROPIC_API_KEY to windows when they are ready
+		if (this.anthropicApiKey && this.windowsMainService) {
+			this._register(this.windowsMainService.onDidSignalReadyWindow(window => {
+				if (this.anthropicApiKey) {
+					this.logService.info(`[CodeApplication] Sending ANTHROPIC_API_KEY to window ${window.id}`);
+					window.sendWhenReady('void-anthropic-api-key', CancellationToken.None, this.anthropicApiKey);
+				}
+			}));
+		}
+
 		app.on('accessibility-support-changed', (event, accessibilitySupportEnabled) => {
 			this.windowsMainService?.sendToAll('vscode:accessibilitySupportChanged', accessibilitySupportEnabled);
 		});
@@ -1273,7 +1286,8 @@ export class CodeApplication extends Disposable {
 					cli: args,
 					urisToOpen: initialProtocolUrls.openables,
 					gotoLineMode: true,
-					initialStartup: true
+					initialStartup: true,
+					anthropicApiKey: this.anthropicApiKey
 					// remoteAuthority: will be determined based on openables
 				});
 			}
@@ -1304,7 +1318,8 @@ export class CodeApplication extends Disposable {
 							forceNewWindow: true,
 							forceEmpty: true,
 							gotoLineMode: true,
-							initialStartup: true
+							initialStartup: true,
+							anthropicApiKey: this.anthropicApiKey
 							// remoteAuthority: will be determined based on openables
 						});
 					}
@@ -1332,12 +1347,10 @@ export class CodeApplication extends Disposable {
 					cli: args,
 					forceNewWindow: true,
 					forceEmpty: true,
-					noRecentEntry,
-					waitMarkerFileURI,
+					gotoLineMode: true,
 					initialStartup: true,
-					remoteAuthority,
-					forceProfile,
-					forceTempProfile
+					anthropicApiKey: this.anthropicApiKey
+					// remoteAuthority: will be determined based on openables
 				});
 			}
 
@@ -1354,6 +1367,7 @@ export class CodeApplication extends Disposable {
 					noRecentEntry,
 					waitMarkerFileURI,
 					initialStartup: true,
+					anthropicApiKey: this.anthropicApiKey,
 					// remoteAuthority: will be determined based on macOpenFiles
 				});
 			}
@@ -1372,7 +1386,8 @@ export class CodeApplication extends Disposable {
 			initialStartup: true,
 			remoteAuthority,
 			forceProfile,
-			forceTempProfile
+			forceTempProfile,
+			anthropicApiKey: this.anthropicApiKey
 		});
 	}
 

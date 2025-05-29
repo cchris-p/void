@@ -262,6 +262,14 @@ export abstract class AbstractNativeEnvironmentService implements INativeEnviron
 		this.args['continueOn'] = value;
 	}
 
+	@memoize
+	getAnthropicApiKey(): string | undefined {
+		// Default implementation for environments where it's not directly available
+		// or not passed through INativeWindowConfiguration.
+		// Renderer-specific NativeWorkbenchEnvironmentService overrides this.
+		return undefined;
+	}
+
 	get args(): NativeParsedArgs { return this._args; }
 
 	constructor(

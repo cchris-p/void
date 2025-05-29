@@ -82,6 +82,7 @@ interface IOpenBrowserWindowOptions {
 	readonly emptyWindowBackupInfo?: IEmptyWindowBackupInfo;
 	readonly forceProfile?: string;
 	readonly forceTempProfile?: boolean;
+	readonly anthropicApiKey?: string; // Added for API key propagation
 }
 
 interface IPathResolveOptions {
@@ -561,7 +562,8 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 					remoteAuthority: filesToOpen.remoteAuthority,
 					forceNewTabbedWindow: openConfig.forceNewTabbedWindow,
 					forceProfile: openConfig.forceProfile,
-					forceTempProfile: openConfig.forceTempProfile
+					forceTempProfile: openConfig.forceTempProfile,
+					anthropicApiKey: openConfig.anthropicApiKey
 				}), true);
 			}
 		}
@@ -717,7 +719,8 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 			windowToUse,
 			emptyWindowBackupInfo,
 			forceProfile: openConfig.forceProfile,
-			forceTempProfile: openConfig.forceTempProfile
+			forceTempProfile: openConfig.forceTempProfile,
+			anthropicApiKey: openConfig.anthropicApiKey
 		});
 	}
 
@@ -739,7 +742,8 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 			filesToOpen,
 			windowToUse,
 			forceProfile: openConfig.forceProfile,
-			forceTempProfile: openConfig.forceTempProfile
+			forceTempProfile: openConfig.forceTempProfile,
+			anthropicApiKey: openConfig.anthropicApiKey
 		});
 	}
 
@@ -1423,7 +1427,8 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 			waitMarkerFileURI: openConfig.waitMarkerFileURI,
 			remoteAuthority,
 			forceProfile: openConfig.forceProfile,
-			forceTempProfile: openConfig.forceTempProfile
+			forceTempProfile: openConfig.forceTempProfile,
+			anthropicApiKey: openConfig.anthropicApiKey
 		};
 
 		return this.open(openArgs);
@@ -1486,6 +1491,7 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 			remoteAuthority: options.remoteAuthority,
 			workspace: options.workspace,
 			userEnv: { ...this.initialUserEnv, ...options.userEnv },
+			anthropicApiKey: options.anthropicApiKey,
 
 			nls: {
 				messages: getNLSMessages(),

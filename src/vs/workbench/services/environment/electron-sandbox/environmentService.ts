@@ -147,6 +147,11 @@ export class NativeWorkbenchEnvironmentService extends AbstractNativeEnvironment
 	@memoize
 	get filesToWait(): IPathsToWaitFor | undefined { return this.configuration.filesToWait; }
 
+	@memoize
+	override getAnthropicApiKey(): string | undefined {
+		return this.configuration.anthropicApiKey;
+	}
+
 	constructor(
 		private readonly configuration: INativeWindowConfiguration,
 		productService: IProductService
